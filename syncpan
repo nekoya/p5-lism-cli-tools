@@ -34,7 +34,7 @@ sub main {
     }
 
     for my $server ( @$servers ) {
-        print CYAN . '[' . $server . '] ' . RESET . 'sync ...';
+        print CYAN . '[' . $server . '] ' . RESET . 'sync ... ';
         system "rsync -az /usr/local/CPAN $server:/usr/local";
         print "done\n";
     }
