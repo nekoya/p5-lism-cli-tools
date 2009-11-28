@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+
+package Lism::CLI::difal;
+use Any::Moose;
+extends 'Lism::CLI';
+
+our $USAGE = <<'END_USAGE';
+difal - compare local file's md5sum with other server's one
+  Usage: difal [--group=group][--server=server][--verbose] filename
+
+  Options:
+    -g(--groups)  server groups
+    -s(--servers) server names
+    -v(--verbose) print also md5 matched server
+    -h(--help)    show this help
+
+difal requires Lism::Config.
+
+Written by Ryo Miyake<ryo.studiom@gmail.com>
+END_USAGE
+
+has '+options' => (
+    default => sub { [ qw(help group=s server=s verbose) ] },
+);
+
+use Term::ANSIColor qw(:constants);
+
+sub main {
+    my ($self, @args) = @_;
+    my $filename = $ARGV[0] or $self->usage;
+    my $local_md5 = `md5sum $filename|awk '{print \$1}'`;
+    chomp $local_md5;
+    return unless $local_md5;
+
+    my $unmatched = 0;
+    my $log = "local md5:$local_md5\n";
+    my $servers = $self->conf->parse_servers_option($self->opt);
+    unless ( @$servers ) {
+        print "there are no target servers.\n";
+        $self->usage;
+    }
+    for my $server ( @$servers ) {
+        my $md5 = `ssh $server md5sum $filename 2>/dev/null|awk '{print \$1}'`;
+        chomp $md5;
+        my $line = CYAN."[$server] ".RESET;
+        if ( $md5 ) {
+            if ( $md5 ne $local_md5 ) {
+                $line .= RED;
+                $unmatched++;
+            }
+            $line .= $md5 . RESET;
+        } else {
+            $line .= RED.'not found'.RESET;
+        }
+        $line .= "\n";
+        $log .= $line if $md5 ne $local_md5 || $self->opt->{ verbose };
+    }
+    $log .= $unmatched ? "found $unmatched unmatched server(s)\n"
+                       : GREEN."all servers green\n";
+    $self->log($log . RESET);
+}
+
+package main;
+use strict;
+use warnings;
+use utf8;
+
+use Lism::Config;
+
+my $conf = Lism::Config->new;
+my $app = Lism::CLI::difal->new(conf => $conf);
+$app->run;
+if ( $app->failed ) {
+    print $app->report;
+} else {
+    print $app->log;
+}

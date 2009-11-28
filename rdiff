@@ -1,0 +1,92 @@
+#!/usr/bin/perl
+
+package Lism::CLI::rdiff;
+use Any::Moose;
+extends 'Lism::CLI';
+
+our $USAGE = <<'END_USAGE';
+rdiff - get diff of local file (or directory) and remote one
+  Usage: rdiff filename server
+
+  Options:
+    -h(--help)    show this help
+
+rdiff can check difference of directory, checking directory names and file hashs.
+
+$ENV{ DIFF_OPT } works as options of diff command.
+
+  For example:
+    rdiff /etc/passwd s1
+    DIFF_OPT='-U 1' rdiff ~/.ssh s1
+
+Written by Ryo Miyake<ryo.studiom@gmail.com>
+END_USAGE
+
+has '+options' => (
+    default => sub { [ qw(help) ] },
+);
+
+use File::Temp;
+use Term::ANSIColor qw(:constants);
+
+sub main {
+    my ($self, @args) = @_;
+    my $file   = shift @ARGV or $self->usage;
+    my $server = shift @ARGV or $self->usage;
+    my $diffOpt = $ENV{DIFF_OPT} || '';
+
+    # Compare file
+    if ( -f $file ) {
+        my $fh = File::Temp->new or die "Failed create temporary file.";
+        my $tmpfile = $fh->filename;
+        system "scp $server:$file $tmpfile 2>/dev/null";
+        system "diff $diffOpt $file $tmpfile";
+    }
+    # Compare directory
+    elsif ( -d $file ) {
+        # get local hash
+        my $fh1 = File::Temp->new or die "Failed create temporary file.";
+        my $fn1 = $fh1->filename;
+        for my $d (`find "$file" -type d|sort`) {
+            chomp $d;
+            print $fh1 "$d\n";
+        }
+        for my $f (`find "$file" -type f|sort`) {
+            chop $f;
+            my $md5 = (split(/ /, `md5sum $f 2>/dev/null`))[0];
+            print $fh1 sprintf "%-32s %s\n", $f, $md5;
+        }
+
+        # get remote hash
+        my $fh2 = File::Temp->new or die "Failed create temporary file.";
+        my $fn2 = $fh2->filename;
+        for my $d ( `ssh $server find "$file" -type d|sort` ) {
+            chomp $d;
+            print $fh2 "$d\n";
+        }
+        for my $f ( `ssh $server find "$file" -type f|sort` ) {
+            chomp $f;
+            next if !$f;
+            my $md5 = (split(/ /, `ssh $server md5sum $f 2>/dev/null`))[0];
+            print $fh2 sprintf("%-32s %s\n", $f, $md5);
+        }
+        system "diff $diffOpt $fn1 $fn2";
+    } else {
+        die "$file was not found.";
+    }
+}
+
+package main;
+use strict;
+use warnings;
+use utf8;
+
+use Lism::Config;
+
+my $conf = Lism::Config->new;
+my $app = Lism::CLI::rdiff->new(conf => $conf);
+$app->run;
+if ( $app->failed ) {
+    print $app->log;
+    exit 1;
+}

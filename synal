@@ -1,0 +1,92 @@
+#!/usr/bin/perl
+
+package Lism::CLI::synal;
+use Any::Moose;
+extends 'Lism::CLI';
+
+our $USAGE = <<'END_USAGE';
+synal - sync file or directory for any servers
+  Usage: synal [--group=group][--server=server][--force][--test][--verbose] filename servers
+
+  Options:
+    -g(--groups)  server groups
+    -s(--servers) server names
+    -f(--force)   force sync if same name file exists
+    -t(--test)    only do file checking
+    -v(--verbose) verbose mode
+    -h(--help)    show this help
+
+synal requires Lism::Config.
+
+Written by Ryo Miyake<ryo.studiom@gmail.com>
+END_USAGE
+
+has '+options' => (
+    default => sub { [ qw(help group=s server=s force test verbose) ] },
+);
+
+use FindBin;
+use Term::ANSIColor qw(:constants);
+
+sub main {
+    my ($self, @args) = @_;
+    my $file = shift @ARGV or $self->usage;
+    $file =~ s/\/$//;
+
+    my $servers = $self->conf->parse_servers_option($self->opt);
+    $self->usage unless @$servers;
+    print "*** Sync [$file] ***\n";
+    for my $server ( @$servers ) {
+        print CYAN . "[" . $server . "] " . RESET;
+
+        my $cmd = -f $file ? "rsync -alz --delete $file  $server:$file"
+                           : "rsync -alz --delete $file/ $server:$file";
+
+        # force sync
+        if ( $self->opt->{ force } ) {
+            print RED."force sync.\n".RESET;
+            system $cmd unless $self->opt->{ test };
+            next;
+        }
+
+        # create remote file
+        unless ( `ssh $server find $file 2>/dev/null` ) {
+            print GREEN."create $file\n".RESET;
+            system $cmd unless $self->opt->{ test };
+            next;
+        }
+
+        # skip sync when exists file has same contents
+        print "check diff ... ";
+        my $diff = `$FindBin::Bin/rdiff $file $server`;
+        unless ( $diff ) {
+            print "skiped.\n";
+            next;
+        }
+
+        # show diff
+        print $diff if $self->confirm('different. show diff?');
+
+        # sync
+        if ( $self->confirm('do sync?') ) {
+            print "sync.\n";
+            system $cmd unless $self->opt->{ test };
+        }
+    }
+}
+
+package main;
+use strict;
+use warnings;
+use utf8;
+
+use Lism::Config;
+
+my $conf = Lism::Config->new;
+my $app = Lism::CLI::synal->new(conf => $conf);
+$app->run;
+if ( $app->failed ) {
+    print $app->report;
+} else {
+    print $app->log;
+}
