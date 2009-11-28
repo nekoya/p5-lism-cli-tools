@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+
+package Lism::CLI::forall;
+use Any::Moose;
+extends 'Lism::CLI';
+
+our $USAGE = <<'END_USAGE';
+forall - exec command on each servers
+  Usage: forall [--group=group][--server=server][--nobr] command
+
+  Options:
+    -g(--groups)  server groups
+    -s(--servers) server names
+    -n(--nobr)    not break line after server name
+    -h(--help)    show this help
+
+  Examples:
+    forall -n -g all hostname
+    forall -s s1,s2,s3 'hostname; cat /etc/sysconfig/network|grep -i hostname'
+
+forall requires Lism::Config.
+
+Written by Ryo Miyake<ryo.studiom@gmail.com>
+END_USAGE
+
+has '+options' => (
+    default => sub { [ qw(help group=s server=s nobr) ] },
+);
+
+use Term::ANSIColor qw(:constants);
+
+sub main {
+    my ($self, @args) = @_;
+    my $cmd = shift @ARGV or $self->usage;
+
+    my $servers = $self->conf->parse_servers_option($self->opt);
+    unless ( @$servers ) {
+        print "there are no target servers.\n";
+        $self->usage;
+    }
+
+    for my $server ( @$servers ) {
+        print CYAN . '[' . $server . '] ' . RESET;
+        print "\n" unless $self->opt->{ nobr };
+        system "ssh $server '$cmd'";
+        print "\n" unless $self->opt->{ nobr };
+    }
+}
+
+package main;
+use strict;
+use warnings;
+use utf8;
+
+use Lism::Config;
+
+my $conf = Lism::Config->new;
+my $app = Lism::CLI::forall->new(conf => $conf);
+$app->run;
+print $app->report if $app->failed;
