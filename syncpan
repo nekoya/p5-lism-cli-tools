@@ -1,0 +1,53 @@
+#!/usr/bin/perl
+
+package Lism::CLI::synccpan;
+use Any::Moose;
+extends 'Lism::CLI';
+
+our $USAGE = <<'END_USAGE';
+syncpan - sync /usr/local/CPAN
+  Usage: syncpan [--group=group][--server=server]
+
+  Options:
+    -g(--groups)  server groups
+    -s(--servers) server names
+    -h(--help)    show this help
+
+forall requires Lism::Config.
+
+Written by Ryo Miyake<ryo.studiom@gmail.com>
+END_USAGE
+
+has '+options' => (
+    default => sub { [ qw(help group=s server=s) ] },
+);
+
+use Term::ANSIColor qw(:constants);
+
+sub main {
+    my ($self, @args) = @_;
+
+    my $servers = $self->conf->parse_servers_option($self->opt);
+    unless ( @$servers ) {
+        print "there are no target servers.\n";
+        $self->usage;
+    }
+
+    for my $server ( @$servers ) {
+        print CYAN . '[' . $server . '] ' . RESET . 'sync ...';
+        system "rsync -az /usr/local/CPAN $server:/usr/local";
+        print "done\n";
+    }
+}
+
+package main;
+use strict;
+use warnings;
+use utf8;
+
+use Lism::Config;
+
+my $conf = Lism::Config->new;
+my $app = Lism::CLI::forall->new(conf => $conf);
+$app->run;
+print $app->report if $app->failed;
