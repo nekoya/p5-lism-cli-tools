@@ -40,9 +40,9 @@ sub main {
         $self->usage;
     }
     for my $server ( @$servers ) {
+        my $line = CYAN."[$server] ".RESET;
         my $md5 = `ssh $server md5sum $filename 2>/dev/null|awk '{print \$1}'`;
         chomp $md5;
-        my $line = CYAN."[$server] ".RESET;
         if ( $md5 ) {
             if ( $md5 ne $local_md5 ) {
                 $line .= RED;
