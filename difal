@@ -33,7 +33,7 @@ sub main {
     return unless $local_md5;
 
     my $unmatched = 0;
-    my $log = "local md5:$local_md5\n";
+    print "local md5:$local_md5\n";
     my $servers = $self->conf->parse_servers_option($self->opt);
     unless ( @$servers ) {
         print "there are no target servers.\n";
@@ -53,11 +53,11 @@ sub main {
             $line .= RED.'not found'.RESET;
         }
         $line .= "\n";
-        $log .= $line if $md5 ne $local_md5 || $self->opt->{ verbose };
+        print $line if $md5 ne $local_md5 || $self->opt->{ verbose };
     }
-    $log .= $unmatched ? "found $unmatched unmatched server(s)\n"
-                       : GREEN."all servers green\n";
-    $self->log($log . RESET);
+    print $unmatched ? "found $unmatched unmatched server(s)\n"
+                     : GREEN."all servers green\n";
+    print RESET;
 }
 
 package main;
@@ -70,8 +70,4 @@ use Lism::Config;
 my $conf = Lism::Config->new;
 my $app = Lism::CLI::difal->new(conf => $conf);
 $app->run;
-if ( $app->failed ) {
-    print $app->report;
-} else {
-    print $app->log;
-}
+print $app->report if $app->failed;
